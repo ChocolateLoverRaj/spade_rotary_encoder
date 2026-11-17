@@ -1,0 +1,79 @@
+pub enum Direction {
+    Clockwise,
+    CounterClockwise,
+}
+
+enum RotaryPin {
+    Clk,
+    Dt,
+}
+
+impl PartialEq for RotaryPin {
+    fn eq(self, rhs: Self) -> bool {
+        match (self, rhs) {
+            (Self::Clk, Self::Clk) => true,
+            (Self::Dt, Self::Dt) => true,
+            _ => false,
+        }
+    }
+
+    fn ne(self, rhs: Self) -> bool {
+        !self.eq(rhs)
+    }
+}
+
+impl RotaryPin {
+    fn leading_direction(self) -> Direction {
+        match self {
+            Self::Clk => Direction::Clockwise,
+            Self::Dt => Direction::CounterClockwise,
+        }
+    }
+
+    fn other(self) -> Self {
+        match self {
+            Self::Clk => Self::Dt,
+            Self::Dt => Self::Clk,
+        }
+    }
+}
+
+struct State {
+    clk_pin: bool,
+    dt_pin: bool,
+    leading_pin: Option<RotaryPin>,
+    change: Option<Direction>,
+}
+
+pub entity rotary_encoder(clk: clock, rst: bool, clk_pin: bool, dt_pin: bool) -> Option<Direction> {
+    reg(clk) state: State reset(rst: State(clk_pin: clk_pin, dt_pin: dt_pin, leading_pin: None, change: None)) = {
+        let clk_changed = clk_pin != state.clk_pin;
+        let dt_changed = dt_pin != state.dt_pin;
+        let changed_pin = match (clk_changed, dt_changed) {
+            (true, false) => Some(RotaryPin::Clk),
+            (false, true) => Some(RotaryPin::Dt),
+            _ => None
+        };
+        let (change, leading_pin) = match (changed_pin, state.leading_pin) {
+            (Some(changed_pin), Some(leading_pin)) => {
+                let change = if changed_pin != leading_pin {
+                    // non-leading pin caught up
+                    leading_pin.leading_direction()
+                } else {
+                    // leading pin moved back
+                    leading_pin.other().leading_direction()
+                };
+                (Some(change), None)
+            },
+            (Some(changed_pin), None) => {
+                (Some(changed_pin.leading_direction()), Some(changed_pin))
+            },
+            (None, leading_pin) => {
+                // Either no pins changed or both pins changed
+                (None, leading_pin)
+            }
+        };
+        State(clk_pin: clk_pin, dt_pin: dt_pin, leading_pin: leading_pin, change: change)
+    };
+    state.change
+}

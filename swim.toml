@@ -1,0 +1,3 @@
+name = "rotary_encoder"
+
+description = "Process input from rotary encoders"
